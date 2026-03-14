@@ -64,6 +64,7 @@ cargo run -- <subcommand>  # Run CLI
 - [Dependency Table](docs/feature/DEPENDENCY_TABLE.md) — Flat dependency list with conflict filtering
 - [Multi-Module Support](docs/feature/MULTI_MODULE_SUPPORT.md) — Module discovery, loading, and assembly
 - [Import / Export](docs/feature/IMPORT_EXPORT.md) — JSON and text tree export/import
+- [Risk Assessment](docs/feature/RISK_ASSESSMENT.md) — Conflict risk levels with BOM detection via dependencyInsight
 
 ## Skills
 
