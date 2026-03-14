@@ -33,6 +33,7 @@ pub struct TestGradleRunner {
     calls: RefCell<Vec<RunnerCall>>,
     dependency_output: RefCell<String>,
     module_outputs: RefCell<HashMap<String, String>>,
+    module_errors: RefCell<HashMap<String, RunnerError>>,
     insight_outputs: RefCell<HashMap<String, String>>,
     insight_error: RefCell<bool>,
     modules: RefCell<Vec<GradleModule>>,
@@ -45,6 +46,7 @@ impl TestGradleRunner {
             calls: RefCell::new(Vec::new()),
             dependency_output: RefCell::new(String::new()),
             module_outputs: RefCell::new(HashMap::new()),
+            module_errors: RefCell::new(HashMap::new()),
             insight_outputs: RefCell::new(HashMap::new()),
             insight_error: RefCell::new(false),
             modules: RefCell::new(Vec::new()),
@@ -61,6 +63,13 @@ impl TestGradleRunner {
         self.module_outputs
             .borrow_mut()
             .insert(module_path.to_string(), output.to_string());
+        self
+    }
+
+    pub fn with_module_error(self, module_path: &str, error: RunnerError) -> Self {
+        self.module_errors
+            .borrow_mut()
+            .insert(module_path.to_string(), error);
         self
     }
 
@@ -126,6 +135,10 @@ impl GradleRunner for TestGradleRunner {
                 module_path: module.path.clone(),
                 configuration,
             });
+
+        if let Some(err) = self.module_errors.borrow_mut().remove(&module.path) {
+            return Err(err);
+        }
 
         if let Some(err) = self.error_to_return.borrow_mut().take() {
             return Err(err);

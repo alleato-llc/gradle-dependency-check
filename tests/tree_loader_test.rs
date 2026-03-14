@@ -152,6 +152,79 @@ fn configuration_passed_to_runner() {
 }
 
 #[test]
+fn skips_failing_modules_and_loads_remaining() {
+    let app_module = GradleModule {
+        name: "app".to_string(),
+        path: ":app".to_string(),
+    };
+    let distribution_module = GradleModule {
+        name: "distribution".to_string(),
+        path: ":distribution".to_string(),
+    };
+    let core_module = GradleModule {
+        name: "core".to_string(),
+        path: ":core".to_string(),
+    };
+
+    let runner = TestGradleRunner::new()
+        .with_modules(vec![
+            app_module,
+            distribution_module,
+            core_module,
+        ])
+        .with_module_output(":app", APP_MODULE_OUTPUT)
+        .with_module_error(
+            ":distribution",
+            gradle_dependency_check::error::RunnerError::ExecutionFailed {
+                exit_code: 1,
+                stderr: "configuration 'runtimeClasspath' not found".to_string(),
+            },
+        )
+        .with_module_output(":core", CORE_MODULE_OUTPUT);
+
+    let tree = tree_loader::load_tree(
+        &runner,
+        "/tmp/my-project",
+        GradleConfiguration::CompileClasspath,
+        None,
+    )
+    .unwrap();
+
+    // Should have 2 module roots (app + core), distribution skipped
+    assert_eq!(tree.roots.len(), 2);
+
+    // All 3 modules should have been attempted
+    assert_eq!(runner.call_count(), 4); // list_projects + 3 module calls
+}
+
+#[test]
+fn all_modules_failing_returns_error() {
+    let dist_module = GradleModule {
+        name: "distribution".to_string(),
+        path: ":distribution".to_string(),
+    };
+
+    let runner = TestGradleRunner::new()
+        .with_modules(vec![dist_module])
+        .with_module_error(
+            ":distribution",
+            gradle_dependency_check::error::RunnerError::ExecutionFailed {
+                exit_code: 1,
+                stderr: "configuration 'runtimeClasspath' not found".to_string(),
+            },
+        );
+
+    let result = tree_loader::load_tree(
+        &runner,
+        "/tmp/my-project",
+        GradleConfiguration::RuntimeClasspath,
+        None,
+    );
+
+    assert!(result.is_err());
+}
+
+#[test]
 fn empty_output_produces_empty_tree() {
     let runner = TestGradleRunner::new().with_dependency_output("");
 

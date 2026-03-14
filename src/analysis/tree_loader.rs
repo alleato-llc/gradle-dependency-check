@@ -40,10 +40,38 @@ pub fn load_tree(
     }
 
     let mut module_trees = Vec::new();
+    let mut skipped = Vec::new();
     for m in &modules {
-        let output = runner.run_module_dependencies(project_path, m, configuration)?;
-        let module_tree = tree_parser::parse(&output, &m.name, configuration);
-        module_trees.push((m.clone(), module_tree));
+        match runner.run_module_dependencies(project_path, m, configuration) {
+            Ok(output) => {
+                let module_tree = tree_parser::parse(&output, &m.name, configuration);
+                module_trees.push((m.clone(), module_tree));
+            }
+            Err(e) => {
+                eprintln!("Warning: skipping module {}: {}", m.path, e);
+                skipped.push(m.path.clone());
+            }
+        }
+    }
+
+    if module_trees.is_empty() {
+        return Err(RunnerError::ExecutionFailed {
+            exit_code: 1,
+            stderr: format!(
+                "No modules could be loaded for configuration '{}'. All {} modules failed.",
+                configuration.as_str(),
+                skipped.len()
+            ),
+        });
+    }
+
+    if !skipped.is_empty() {
+        eprintln!(
+            "Loaded {}/{} modules ({} skipped)",
+            module_trees.len(),
+            modules.len(),
+            skipped.len()
+        );
     }
 
     Ok(multi_module_assembler::assemble(
