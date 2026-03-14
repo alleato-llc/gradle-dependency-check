@@ -57,7 +57,13 @@ cargo run -- <subcommand>  # Run CLI
 - [Architecture](docs/ARCHITECTURE.md) — System design, modules, data flow
 - [Testing](docs/TESTING.md) — Test strategy, infrastructure, conventions
 - [CLI Commands](docs/feature/CLI_COMMANDS.md) — All 7 subcommands with examples
-- [Dependency Analysis](docs/feature/DEPENDENCY_ANALYSIS.md) — Core analysis features
+- [Conflict Detection](docs/feature/CONFLICT_DETECTION.md) — Version conflict detection and reporting
+- [Scope Validation](docs/feature/SCOPE_VALIDATION.md) — Test library scope checking
+- [Duplicate Detection](docs/feature/DUPLICATE_DETECTION.md) — Cross-module and within-module duplicate detection
+- [Dependency Diff](docs/feature/DEPENDENCY_DIFF.md) — Baseline comparison with auto-detect inputs
+- [Dependency Table](docs/feature/DEPENDENCY_TABLE.md) — Flat dependency list with conflict filtering
+- [Multi-Module Support](docs/feature/MULTI_MODULE_SUPPORT.md) — Module discovery, loading, and assembly
+- [Import / Export](docs/feature/IMPORT_EXPORT.md) — JSON and text tree export/import
 
 ## Skills
 
