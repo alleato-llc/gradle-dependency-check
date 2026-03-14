@@ -5,3 +5,4 @@ pub mod scope_validator;
 pub mod duplicate_detector;
 pub mod multi_module_assembler;
 pub mod tree_loader;
+pub mod risk_calculator;

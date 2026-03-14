@@ -67,6 +67,8 @@ pub fn tree_with_conflicts() -> DependencyTree {
         requested_version: "2.13.0".to_string(),
         resolved_version: "2.14.2".to_string(),
         requested_by: "org.springframework:spring-web".to_string(),
+        risk_level: None,
+        risk_reason: None,
     };
 
     DependencyTree {

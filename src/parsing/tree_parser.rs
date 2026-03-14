@@ -58,6 +58,8 @@ pub fn parse(output: &str, project_name: &str, configuration: GradleConfiguratio
                 requested_version: node.requested_version.clone(),
                 resolved_version: node.resolved_version.clone().unwrap_or_default(),
                 requested_by,
+                risk_level: None,
+                risk_reason: None,
             });
         }
 

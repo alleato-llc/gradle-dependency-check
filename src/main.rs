@@ -5,7 +5,8 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 
 use gradle_dependency_check::analysis::{
-    diff_calculator, duplicate_detector, scope_validator, table_calculator, tree_loader,
+    diff_calculator, duplicate_detector, risk_calculator, scope_validator, table_calculator,
+    tree_loader,
 };
 use gradle_dependency_check::dependency::models::{
     ChangeKind, GradleConfiguration, ReportFormat,
@@ -74,6 +75,9 @@ struct FormatArgs {
     /// Output format
     #[arg(short, long, default_value = "text")]
     format: Format,
+    /// Assess conflict risk levels
+    #[arg(long)]
+    risk: bool,
 }
 
 #[derive(clap::Args)]
@@ -166,7 +170,10 @@ fn main() -> Result<()> {
             if args.list_modules {
                 return print_modules(&runner, &args.project_path);
             }
-            let tree = load(&runner, &args.project_path, &args.configuration, args.module.as_deref())?;
+            let mut tree = load(&runner, &args.project_path, &args.configuration, args.module.as_deref())?;
+            if args.risk {
+                tree.conflicts = risk_calculator::assess_conflicts(&tree);
+            }
             println!("{}", conflict_report::report(&tree, args.format.to_report_format()));
         }
         Commands::Table(args) => {

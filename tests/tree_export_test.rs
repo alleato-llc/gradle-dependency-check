@@ -313,6 +313,8 @@ fn tree_with_conflicts_for_roundtrip() -> DependencyTree {
             requested_version: "30.0-jre".to_string(),
             resolved_version: "31.1-jre".to_string(),
             requested_by: "spring-core".to_string(),
+            risk_level: None,
+            risk_reason: None,
         }],
     }
 }

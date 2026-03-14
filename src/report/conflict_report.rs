@@ -38,10 +38,17 @@ fn text_report(tree: &DependencyTree) -> String {
     for (coordinate, conflicts) in &grouped {
         lines.push(format!("  {}", coordinate));
         for conflict in conflicts {
+            let risk_suffix = match &conflict.risk_level {
+                Some(level) => format!(" [{}]", level),
+                None => String::new(),
+            };
             lines.push(format!(
-                "    {} -> {} (requested by {})",
-                conflict.requested_version, conflict.resolved_version, conflict.requested_by
+                "    {} -> {} (requested by {}){}",
+                conflict.requested_version, conflict.resolved_version, conflict.requested_by, risk_suffix
             ));
+            if let Some(reason) = &conflict.risk_reason {
+                lines.push(format!("    risk: {}", reason));
+            }
         }
         lines.push(String::new());
     }
@@ -55,24 +62,24 @@ fn text_report(tree: &DependencyTree) -> String {
 }
 
 fn json_report(tree: &DependencyTree) -> String {
-    let conflicts: Vec<serde_json::Value> = tree
-        .conflicts
-        .iter()
-        .map(|c| {
-            serde_json::json!({
-                "coordinate": c.coordinate,
-                "requestedVersion": c.requested_version,
-                "resolvedVersion": c.resolved_version,
-                "requestedBy": c.requested_by,
-            })
-        })
-        .collect();
-
     let report = serde_json::json!({
         "projectName": tree.project_name,
         "configuration": tree.configuration.as_str(),
         "conflictCount": tree.conflicts.len(),
-        "conflicts": conflicts,
+        "conflicts": tree.conflicts.iter().map(|c| {
+            let mut map = serde_json::Map::new();
+            map.insert("coordinate".to_string(), serde_json::json!(c.coordinate));
+            map.insert("requestedVersion".to_string(), serde_json::json!(c.requested_version));
+            map.insert("resolvedVersion".to_string(), serde_json::json!(c.resolved_version));
+            map.insert("requestedBy".to_string(), serde_json::json!(c.requested_by));
+            if let Some(level) = &c.risk_level {
+                map.insert("riskLevel".to_string(), serde_json::json!(level));
+            }
+            if let Some(reason) = &c.risk_reason {
+                map.insert("riskReason".to_string(), serde_json::json!(reason));
+            }
+            serde_json::Value::Object(map)
+        }).collect::<Vec<_>>(),
     });
 
     serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".to_string())

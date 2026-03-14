@@ -189,6 +189,40 @@ impl DependencyNode {
     }
 }
 
+// MARK: - RiskLevel
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RiskLevel {
+    #[serde(rename = "INFO")]
+    Info,
+    #[serde(rename = "LOW")]
+    Low,
+    #[serde(rename = "MEDIUM")]
+    Medium,
+    #[serde(rename = "HIGH")]
+    High,
+    #[serde(rename = "CRITICAL")]
+    Critical,
+}
+
+impl RiskLevel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Info => "INFO",
+            Self::Low => "LOW",
+            Self::Medium => "MEDIUM",
+            Self::High => "HIGH",
+            Self::Critical => "CRITICAL",
+        }
+    }
+}
+
+impl std::fmt::Display for RiskLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 // MARK: - DependencyConflict
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -200,6 +234,10 @@ pub struct DependencyConflict {
     pub resolved_version: String,
     #[serde(rename = "requestedBy")]
     pub requested_by: String,
+    #[serde(rename = "riskLevel", skip_serializing_if = "Option::is_none")]
+    pub risk_level: Option<RiskLevel>,
+    #[serde(rename = "riskReason", skip_serializing_if = "Option::is_none")]
+    pub risk_reason: Option<String>,
 }
 
 // MARK: - DependencyTree
