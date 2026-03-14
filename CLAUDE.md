@@ -29,7 +29,7 @@ cargo run -- <subcommand>  # Run CLI
 | Command | Description |
 |---------|-------------|
 | `graph <path>` | Output dependency tree in DOT format |
-| `conflicts <path>` | Report dependency conflicts |
+| `conflicts <path> [--risk]` | Report dependency conflicts (with optional risk assessment) |
 | `table <path>` | List dependencies in flat table format |
 | `validate <path>` | Check for test libraries in production scopes |
 | `duplicates <path>` | Detect duplicate dependencies across/within modules |

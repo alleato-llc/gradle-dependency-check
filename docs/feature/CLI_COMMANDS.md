@@ -30,7 +30,7 @@ Conflict nodes use `fillcolor="#ffcccc"` (red). Pipe to `dot -Tpng -o graph.png`
 Report dependencies where the resolved version differs from the requested version.
 
 ```bash
-gradle-dependency-check conflicts <project_path> [-c config] [-m module] [-f text|json]
+gradle-dependency-check conflicts <project_path> [-c config] [-m module] [-f text|json] [--risk]
 ```
 
 **Text output:**
@@ -44,7 +44,14 @@ Dependency Conflicts in my-project (Compile Classpath)
 Total: 1 conflict(s) across 1 dependency(ies)
 ```
 
-**JSON output:**
+**With `--risk`:**
+```
+  com.fasterxml.jackson.core:jackson-databind
+    2.13.0 -> 2.14.2 (requested by org.springframework:spring-web) [MEDIUM]
+    risk: Minor version jump (2.13 -> 2.14), reduced: BOM-managed
+```
+
+**JSON output (with `--risk`):**
 ```json
 {
   "projectName": "my-project",
@@ -55,13 +62,17 @@ Total: 1 conflict(s) across 1 dependency(ies)
       "coordinate": "com.fasterxml.jackson.core:jackson-databind",
       "requestedVersion": "2.13.0",
       "resolvedVersion": "2.14.2",
-      "requestedBy": "org.springframework:spring-web"
+      "requestedBy": "org.springframework:spring-web",
+      "riskLevel": "MEDIUM",
+      "riskReason": "Minor version jump (2.13 -> 2.14), reduced: BOM-managed"
     }
   ]
 }
 ```
 
-**When to use:** CI checks to detect or track version conflicts.
+The `--risk` flag runs `gradle dependencyInsight` per unique conflict coordinate to detect BOM-managed dependencies. This adds ~0.4s per coordinate. Omit for faster output without risk levels.
+
+**When to use:** CI checks to detect or track version conflicts. Add `--risk` to prioritize which conflicts need attention.
 
 ## `table`
 
