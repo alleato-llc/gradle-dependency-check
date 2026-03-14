@@ -172,7 +172,7 @@ fn main() -> Result<()> {
             }
             let mut tree = load(&runner, &args.project_path, &args.configuration, args.module.as_deref())?;
             if args.risk {
-                tree.conflicts = risk_calculator::assess_conflicts(&tree);
+                tree.conflicts = risk_calculator::assess_conflicts(&tree, &runner, &args.project_path);
             }
             println!("{}", conflict_report::report(&tree, args.format.to_report_format()));
         }

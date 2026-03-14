@@ -1,5 +1,8 @@
+use std::collections::HashSet;
+
 use crate::analysis::tree_analysis;
 use crate::dependency::models::{DependencyConflict, DependencyTree, RiskLevel};
+use crate::runner::gradle_runner::GradleRunner;
 
 /// Parsed semver components.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,15 +128,58 @@ fn shift_down(level: RiskLevel) -> RiskLevel {
     }
 }
 
-/// Checks if a dependency is BOM-managed: any node in the tree has `is_constraint == true`
+/// Fallback: checks if a dependency is BOM-managed by looking for constraint nodes in the tree
 /// with the same coordinate and version matching the resolved version.
-fn is_bom_managed(tree: &DependencyTree, coordinate: &str, resolved_version: &str) -> bool {
+fn is_bom_managed_from_tree(tree: &DependencyTree, coordinate: &str, resolved_version: &str) -> bool {
     let all_nodes = tree_analysis::all_nodes(tree);
     all_nodes.iter().any(|node| {
         node.is_constraint
             && node.coordinate() == coordinate
             && node.requested_version == resolved_version
     })
+}
+
+/// Builds a set of BOM-managed coordinates by running `dependencyInsight` for each unique
+/// conflict coordinate. Falls back to tree-based heuristic on runner failure.
+fn build_bom_set(
+    tree: &DependencyTree,
+    runner: &dyn GradleRunner,
+    project_path: &str,
+) -> HashSet<String> {
+    let unique_coordinates: HashSet<&str> = tree
+        .conflicts
+        .iter()
+        .map(|c| c.coordinate.as_str())
+        .collect();
+
+    let mut bom_set = HashSet::new();
+
+    for coordinate in unique_coordinates {
+        match runner.run_dependency_insight(project_path, coordinate, tree.configuration) {
+            Ok(output) => {
+                if let Some(first_line) = output.lines().next() {
+                    if first_line.contains("(selected by rule)")
+                        || first_line.contains("(by constraint)")
+                    {
+                        bom_set.insert(coordinate.to_string());
+                    }
+                }
+            }
+            Err(_) => {
+                // Fallback: check tree for any conflict with this coordinate
+                for conflict in &tree.conflicts {
+                    if conflict.coordinate == coordinate
+                        && is_bom_managed_from_tree(tree, coordinate, &conflict.resolved_version)
+                    {
+                        bom_set.insert(coordinate.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    bom_set
 }
 
 /// Checks if the resolved version is less than the requested version (a downgrade).
@@ -143,8 +189,16 @@ fn is_downgrade(requested: &SemVer, resolved: &SemVer) -> bool {
 
 /// Assesses risk for all conflicts in a dependency tree.
 /// Returns the conflicts with `risk_level` and `risk_reason` populated.
-pub fn assess_conflicts(tree: &DependencyTree) -> Vec<DependencyConflict> {
+///
+/// Uses `dependencyInsight` via the runner for accurate BOM detection,
+/// falling back to tree-based constraint node heuristic on failure.
+pub fn assess_conflicts(
+    tree: &DependencyTree,
+    runner: &dyn GradleRunner,
+    project_path: &str,
+) -> Vec<DependencyConflict> {
     let is_production = tree.configuration.is_production();
+    let bom_set = build_bom_set(tree, runner, project_path);
 
     tree.conflicts
         .iter()
@@ -160,7 +214,7 @@ pub fn assess_conflicts(tree: &DependencyTree) -> Vec<DependencyConflict> {
                     let mut reason = base_reason(&req, &res);
 
                     // BOM-managed adjustment (-1)
-                    if is_bom_managed(tree, &conflict.coordinate, &conflict.resolved_version) {
+                    if bom_set.contains(&conflict.coordinate) {
                         level = shift_down(level);
                         reason.push_str(", reduced: BOM-managed");
                     }
@@ -188,7 +242,7 @@ pub fn assess_conflicts(tree: &DependencyTree) -> Vec<DependencyConflict> {
                         conflict.requested_version, conflict.resolved_version
                     );
 
-                    if is_bom_managed(tree, &conflict.coordinate, &conflict.resolved_version) {
+                    if bom_set.contains(&conflict.coordinate) {
                         level = shift_down(level);
                         reason.push_str(", reduced: BOM-managed");
                     }

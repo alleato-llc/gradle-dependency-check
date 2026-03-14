@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 use gradle_dependency_check::dependency::models::{GradleConfiguration, GradleModule};
 use gradle_dependency_check::error::RunnerError;
@@ -16,6 +17,11 @@ pub enum RunnerCall {
         module_path: String,
         configuration: GradleConfiguration,
     },
+    DependencyInsight {
+        project_path: String,
+        dependency: String,
+        configuration: GradleConfiguration,
+    },
     ListProjects {
         project_path: String,
     },
@@ -26,7 +32,9 @@ pub enum RunnerCall {
 pub struct TestGradleRunner {
     calls: RefCell<Vec<RunnerCall>>,
     dependency_output: RefCell<String>,
-    module_outputs: RefCell<std::collections::HashMap<String, String>>,
+    module_outputs: RefCell<HashMap<String, String>>,
+    insight_outputs: RefCell<HashMap<String, String>>,
+    insight_error: RefCell<bool>,
     modules: RefCell<Vec<GradleModule>>,
     error_to_return: RefCell<Option<RunnerError>>,
 }
@@ -36,7 +44,9 @@ impl TestGradleRunner {
         Self {
             calls: RefCell::new(Vec::new()),
             dependency_output: RefCell::new(String::new()),
-            module_outputs: RefCell::new(std::collections::HashMap::new()),
+            module_outputs: RefCell::new(HashMap::new()),
+            insight_outputs: RefCell::new(HashMap::new()),
+            insight_error: RefCell::new(false),
             modules: RefCell::new(Vec::new()),
             error_to_return: RefCell::new(None),
         }
@@ -51,6 +61,18 @@ impl TestGradleRunner {
         self.module_outputs
             .borrow_mut()
             .insert(module_path.to_string(), output.to_string());
+        self
+    }
+
+    pub fn with_insight_output(self, coordinate: &str, output: &str) -> Self {
+        self.insight_outputs
+            .borrow_mut()
+            .insert(coordinate.to_string(), output.to_string());
+        self
+    }
+
+    pub fn with_insight_error(self) -> Self {
+        *self.insight_error.borrow_mut() = true;
         self
     }
 
@@ -112,6 +134,33 @@ impl GradleRunner for TestGradleRunner {
         let outputs = self.module_outputs.borrow();
         Ok(outputs
             .get(&module.path)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    fn run_dependency_insight(
+        &self,
+        project_path: &str,
+        dependency: &str,
+        configuration: GradleConfiguration,
+    ) -> Result<String, RunnerError> {
+        self.calls
+            .borrow_mut()
+            .push(RunnerCall::DependencyInsight {
+                project_path: project_path.to_string(),
+                dependency: dependency.to_string(),
+                configuration,
+            });
+
+        if *self.insight_error.borrow() {
+            return Err(RunnerError::GradlewNotFound(
+                format!("{}/gradlew", project_path),
+            ));
+        }
+
+        let outputs = self.insight_outputs.borrow();
+        Ok(outputs
+            .get(dependency)
             .cloned()
             .unwrap_or_default())
     }

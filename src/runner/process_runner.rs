@@ -71,6 +71,25 @@ impl GradleRunner for ProcessGradleRunner {
         )
     }
 
+    fn run_dependency_insight(
+        &self,
+        project_path: &str,
+        dependency: &str,
+        configuration: GradleConfiguration,
+    ) -> Result<String, RunnerError> {
+        Self::execute(
+            project_path,
+            &[
+                "dependencyInsight",
+                "--dependency",
+                dependency,
+                "--configuration",
+                configuration.as_str(),
+                "-q",
+            ],
+        )
+    }
+
     fn list_projects(&self, project_path: &str) -> Result<Vec<GradleModule>, RunnerError> {
         let output = Self::execute(project_path, &["projects", "-q"])?;
         Ok(project_list_parser::parse(&output))

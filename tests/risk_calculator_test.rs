@@ -3,6 +3,7 @@ mod support;
 use gradle_dependency_check::analysis::risk_calculator;
 use gradle_dependency_check::dependency::models::*;
 use support::factories;
+use support::test_runner::TestGradleRunner;
 
 fn conflict(
     coordinate: &str,
@@ -38,8 +39,9 @@ fn major_version_jump_is_high() {
     let c = conflict("org.example:lib", "1.0.0", "2.0.0", "root");
     let root = factories::node("com.example", "app", "1.0.0");
     let tree = tree_with_single_conflict(GradleConfiguration::CompileClasspath, c, vec![root]);
+    let runner = TestGradleRunner::new();
 
-    let assessed = risk_calculator::assess_conflicts(&tree);
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
     assert_eq!(assessed.len(), 1);
     assert_eq!(assessed[0].risk_level, Some(RiskLevel::High));
     assert!(assessed[0]
@@ -54,8 +56,9 @@ fn minor_version_jump_is_medium() {
     let c = conflict("org.example:lib", "1.0.0", "1.5.0", "root");
     let root = factories::node("com.example", "app", "1.0.0");
     let tree = tree_with_single_conflict(GradleConfiguration::CompileClasspath, c, vec![root]);
+    let runner = TestGradleRunner::new();
 
-    let assessed = risk_calculator::assess_conflicts(&tree);
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
     assert_eq!(assessed[0].risk_level, Some(RiskLevel::Medium));
     assert!(assessed[0]
         .risk_reason
@@ -69,8 +72,9 @@ fn patch_version_bump_is_low() {
     let c = conflict("org.example:lib", "1.0.0", "1.0.5", "root");
     let root = factories::node("com.example", "app", "1.0.0");
     let tree = tree_with_single_conflict(GradleConfiguration::CompileClasspath, c, vec![root]);
+    let runner = TestGradleRunner::new();
 
-    let assessed = risk_calculator::assess_conflicts(&tree);
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
     assert_eq!(assessed[0].risk_level, Some(RiskLevel::Low));
     assert!(assessed[0]
         .risk_reason
@@ -85,8 +89,9 @@ fn qualifier_only_is_info() {
     let c = conflict("org.example:lib", "1.0.0.Final", "1.0.0.RELEASE", "root");
     let root = factories::node("com.example", "app", "1.0.0");
     let tree = tree_with_single_conflict(GradleConfiguration::CompileClasspath, c, vec![root]);
+    let runner = TestGradleRunner::new();
 
-    let assessed = risk_calculator::assess_conflicts(&tree);
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
     assert_eq!(assessed[0].risk_level, Some(RiskLevel::Info));
     assert!(assessed[0]
         .risk_reason
@@ -99,7 +104,55 @@ fn qualifier_only_is_info() {
 fn bom_managed_reduces_risk() {
     let c = conflict("org.example:lib", "1.0.0", "2.0.0", "root");
 
-    // Add a constraint node that matches the coordinate and resolved version
+    let root = factories::node("com.example", "app", "1.0.0");
+    let tree = tree_with_single_conflict(GradleConfiguration::CompileClasspath, c, vec![root]);
+
+    // Configure the runner to return insight output indicating BOM management
+    let runner = TestGradleRunner::new()
+        .with_insight_output(
+            "org.example:lib",
+            "org.example:lib:2.0.0 (selected by rule)\n   variant \"compile\" ...",
+        );
+
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
+    // HIGH base, reduced by 1 for BOM -> MEDIUM
+    assert_eq!(assessed[0].risk_level, Some(RiskLevel::Medium));
+    assert!(assessed[0]
+        .risk_reason
+        .as_ref()
+        .unwrap()
+        .contains("BOM-managed"));
+}
+
+#[test]
+fn bom_managed_by_constraint_insight() {
+    let c = conflict("org.example:lib", "1.0.0", "2.0.0", "root");
+
+    let root = factories::node("com.example", "app", "1.0.0");
+    let tree = tree_with_single_conflict(GradleConfiguration::CompileClasspath, c, vec![root]);
+
+    // Configure the runner to return insight output with "(by constraint)"
+    let runner = TestGradleRunner::new()
+        .with_insight_output(
+            "org.example:lib",
+            "org.example:lib:2.0.0 (by constraint)\n   variant \"compile\" ...",
+        );
+
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
+    // HIGH base, reduced by 1 for BOM -> MEDIUM
+    assert_eq!(assessed[0].risk_level, Some(RiskLevel::Medium));
+    assert!(assessed[0]
+        .risk_reason
+        .as_ref()
+        .unwrap()
+        .contains("BOM-managed"));
+}
+
+#[test]
+fn bom_managed_falls_back_to_tree_on_runner_failure() {
+    let c = conflict("org.example:lib", "1.0.0", "2.0.0", "root");
+
+    // Add a constraint node that matches the coordinate and resolved version (tree fallback)
     let mut constraint = DependencyNode::new("org.example", "lib", "2.0.0");
     constraint.is_constraint = true;
     let mut root = factories::node("com.example", "app", "1.0.0");
@@ -107,8 +160,12 @@ fn bom_managed_reduces_risk() {
 
     let tree = tree_with_single_conflict(GradleConfiguration::CompileClasspath, c, vec![root]);
 
-    let assessed = risk_calculator::assess_conflicts(&tree);
-    // HIGH base, reduced by 1 for BOM -> MEDIUM
+    // Runner returns error on insight calls -> falls back to tree-based heuristic
+    let runner = TestGradleRunner::new()
+        .with_insight_error();
+
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
+    // HIGH base, reduced by 1 for BOM (tree fallback) -> MEDIUM
     assert_eq!(assessed[0].risk_level, Some(RiskLevel::Medium));
     assert!(assessed[0]
         .risk_reason
@@ -123,8 +180,9 @@ fn downgrade_increases_risk() {
     let c = conflict("org.example:lib", "2.0.0", "1.0.0", "root");
     let root = factories::node("com.example", "app", "1.0.0");
     let tree = tree_with_single_conflict(GradleConfiguration::CompileClasspath, c, vec![root]);
+    let runner = TestGradleRunner::new();
 
-    let assessed = risk_calculator::assess_conflicts(&tree);
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
     // HIGH base (major diff) + 1 for downgrade -> CRITICAL
     assert_eq!(assessed[0].risk_level, Some(RiskLevel::Critical));
     assert!(assessed[0]
@@ -139,8 +197,9 @@ fn test_scope_reduces_risk() {
     let c = conflict("org.example:lib", "1.0.0", "2.0.0", "root");
     let root = factories::node("com.example", "app", "1.0.0");
     let tree = tree_with_single_conflict(GradleConfiguration::TestCompileClasspath, c, vec![root]);
+    let runner = TestGradleRunner::new();
 
-    let assessed = risk_calculator::assess_conflicts(&tree);
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
     // HIGH base, reduced by 1 for test scope -> MEDIUM
     assert_eq!(assessed[0].risk_level, Some(RiskLevel::Medium));
     assert!(assessed[0]
@@ -154,17 +213,20 @@ fn test_scope_reduces_risk() {
 fn combined_adjustments() {
     let c = conflict("org.example:lib", "1.0.0", "2.0.0", "root");
 
-    // BOM-managed constraint node
-    let mut constraint = DependencyNode::new("org.example", "lib", "2.0.0");
-    constraint.is_constraint = true;
-    let mut root = factories::node("com.example", "app", "1.0.0");
-    root.children = vec![constraint];
+    let root = factories::node("com.example", "app", "1.0.0");
 
     // Test scope configuration
     let tree =
         tree_with_single_conflict(GradleConfiguration::TestCompileClasspath, c, vec![root]);
 
-    let assessed = risk_calculator::assess_conflicts(&tree);
+    // Configure runner with BOM insight output
+    let runner = TestGradleRunner::new()
+        .with_insight_output(
+            "org.example:lib",
+            "org.example:lib:2.0.0 (selected by rule)\n   variant \"compile\" ...",
+        );
+
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
     // HIGH base, -1 BOM, -1 test scope -> LOW
     assert_eq!(assessed[0].risk_level, Some(RiskLevel::Low));
     let reason = assessed[0].risk_reason.as_ref().unwrap();
@@ -177,8 +239,9 @@ fn non_semver_handled_gracefully() {
     let c = conflict("org.example:lib", "RELEASE", "SNAPSHOT", "root");
     let root = factories::node("com.example", "app", "1.0.0");
     let tree = tree_with_single_conflict(GradleConfiguration::CompileClasspath, c, vec![root]);
+    let runner = TestGradleRunner::new();
 
-    let assessed = risk_calculator::assess_conflicts(&tree);
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
     assert_eq!(assessed[0].risk_level, Some(RiskLevel::Medium));
     assert!(assessed[0]
         .risk_reason
@@ -193,8 +256,9 @@ fn multi_segment_patch() {
     let c = conflict("org.example:lib", "1.9.22.1", "1.9.25.1", "root");
     let root = factories::node("com.example", "app", "1.0.0");
     let tree = tree_with_single_conflict(GradleConfiguration::CompileClasspath, c, vec![root]);
+    let runner = TestGradleRunner::new();
 
-    let assessed = risk_calculator::assess_conflicts(&tree);
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
     assert_eq!(assessed[0].risk_level, Some(RiskLevel::Low));
     assert!(assessed[0]
         .risk_reason
@@ -231,18 +295,13 @@ fn real_spring_boot_conflicts() {
         "org.springframework.boot:spring-boot-starter",
     );
 
-    // BOM-managed jackson (constraint node present)
-    let mut jackson_constraint =
-        DependencyNode::new("com.fasterxml.jackson.core", "jackson-databind", "2.15.2");
-    jackson_constraint.is_constraint = true;
-
     let slf4j = DependencyNode::new("org.slf4j", "slf4j-api", "1.7.36");
     let jackson =
         DependencyNode::new("com.fasterxml.jackson.core", "jackson-databind", "2.13.0");
     let snakeyaml = DependencyNode::new("org.yaml", "snakeyaml", "1.33.0");
 
     let mut root = DependencyNode::new("com.example", "my-app", "1.0.0");
-    root.children = vec![slf4j, jackson, snakeyaml, jackson_constraint];
+    root.children = vec![slf4j, jackson, snakeyaml];
 
     let tree = DependencyTree {
         project_name: "spring-boot-app".to_string(),
@@ -251,7 +310,14 @@ fn real_spring_boot_conflicts() {
         conflicts: vec![slf4j_conflict, jackson_conflict, snakeyaml_conflict],
     };
 
-    let assessed = risk_calculator::assess_conflicts(&tree);
+    // Configure Jackson as BOM-managed via insight output
+    let runner = TestGradleRunner::new()
+        .with_insight_output(
+            "com.fasterxml.jackson.core:jackson-databind",
+            "com.fasterxml.jackson.core:jackson-databind:2.15.2 (selected by rule)\n   variant \"compile\" ...",
+        );
+
+    let assessed = risk_calculator::assess_conflicts(&tree, &runner, "/tmp/test");
     assert_eq!(assessed.len(), 3);
 
     // SLF4J: major jump -> HIGH

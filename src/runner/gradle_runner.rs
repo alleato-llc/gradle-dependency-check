@@ -16,5 +16,12 @@ pub trait GradleRunner {
         configuration: GradleConfiguration,
     ) -> Result<String, RunnerError>;
 
+    fn run_dependency_insight(
+        &self,
+        project_path: &str,
+        dependency: &str,
+        configuration: GradleConfiguration,
+    ) -> Result<String, RunnerError>;
+
     fn list_projects(&self, project_path: &str) -> Result<Vec<GradleModule>, RunnerError>;
 }
