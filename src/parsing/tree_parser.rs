@@ -41,13 +41,17 @@ pub fn parse(output: &str, project_name: &str, configuration: GradleConfiguratio
             continue;
         };
 
-        // Track conflicts
+        // Track conflicts — find parent by searching stack for depth-1
         if node.has_conflict() {
-            let requested_by = stack
-                .last()
-                .filter(|e| e.depth == depth.saturating_sub(1))
-                .map(|e| e.node.coordinate())
-                .unwrap_or_default();
+            let requested_by = if depth > 0 {
+                stack
+                    .iter()
+                    .rfind(|e| e.depth == depth - 1)
+                    .map(|e| e.node.coordinate())
+                    .unwrap_or_else(|| project_name.to_string())
+            } else {
+                project_name.to_string()
+            };
 
             conflicts.push(DependencyConflict {
                 coordinate: node.coordinate(),
