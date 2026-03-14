@@ -23,7 +23,13 @@ conflict_report::report() → text or JSON output
 ```bash
 gradle-dependency-check conflicts ./my-project
 gradle-dependency-check conflicts ./my-project --format json
+
+# With risk assessment (runs dependencyInsight per conflict)
+gradle-dependency-check conflicts ./my-project --risk
+gradle-dependency-check conflicts ./my-project --risk --format json
 ```
+
+See [Risk Assessment](RISK_ASSESSMENT.md) for details on risk levels and BOM detection.
 
 ## Architecture
 
@@ -33,8 +39,10 @@ gradle-dependency-check conflicts ./my-project --format json
 
 ### Key types
 
-- `DependencyConflict` — `coordinate`, `requested_version`, `resolved_version`, `requested_by`
-- `conflict_report::report()` — text and JSON formatting
+- `DependencyConflict` — `coordinate`, `requested_version`, `resolved_version`, `requested_by`, optional `risk_level` and `risk_reason`
+- `RiskLevel` — `Info`, `Low`, `Medium`, `High`, `Critical`
+- `conflict_report::report()` — text and JSON formatting (includes risk data when present)
+- `risk_calculator::assess_conflicts()` — computes risk levels via semver distance + `dependencyInsight` BOM detection
 
 ### File organization
 
@@ -42,6 +50,7 @@ gradle-dependency-check conflicts ./my-project --format json
 src/parsing/tree_parser.rs          — conflict detection during parse
 src/report/conflict_report.rs       — text/JSON report generation
 src/analysis/tree_analysis.rs       — conflicts_by_coordinate() grouping
+src/analysis/risk_calculator.rs     — risk assessment (--risk flag)
 ```
 
 ## Testing
@@ -49,3 +58,4 @@ src/analysis/tree_analysis.rs       — conflicts_by_coordinate() grouping
 - `tree_parser_test` — conflict marker parsing, parent tracking, version extraction
 - `conflict_report_test` — text/JSON output, empty/populated conflicts
 - `tree_analysis_test` — conflict grouping by coordinate
+- `risk_calculator_test` — risk levels, BOM detection, downgrades, combined adjustments
