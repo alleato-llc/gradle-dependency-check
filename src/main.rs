@@ -75,9 +75,6 @@ struct FormatArgs {
     /// Output format
     #[arg(short, long, default_value = "text")]
     format: Format,
-    /// Assess conflict risk levels
-    #[arg(long)]
-    risk: bool,
 }
 
 #[derive(clap::Args)]
@@ -171,9 +168,7 @@ fn main() -> Result<()> {
                 return print_modules(&runner, &args.project_path);
             }
             let mut tree = load(&runner, &args.project_path, &args.configuration, args.module.as_deref())?;
-            if args.risk {
-                tree.conflicts = risk_calculator::assess_conflicts(&tree, &runner, &args.project_path);
-            }
+            tree.conflicts = risk_calculator::assess_conflicts(&tree, &runner, &args.project_path);
             println!("{}", conflict_report::report(&tree, args.format.to_report_format()));
         }
         Commands::Table(args) => {
